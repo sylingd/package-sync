@@ -1,6 +1,4 @@
-'use strict';
-
-const Controller = require('egg').Controller;
+import { Controller } from 'egg';
 
 class HomeController extends Controller {
   async index() {

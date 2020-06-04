@@ -1,20 +1,11 @@
 import * as decompress from 'decompress';
-import { copyFile, stat, writeFile } from 'fs';
+import { copyFile, stat, writeFile } from 'fs-extra';
 import * as globAsync from 'glob';
 import { tmpdir } from 'os';
 import { dirname, resolve as resolvePath } from 'path';
 import { v4 as uuid } from 'uuid';
 import { fetch, mkdirs, rmdirs } from '.';
 import * as cdnjs from './cdnjs';
-
-function writeFileAsync(path: string, content: string | NodeJS.ArrayBufferView) {
-  return new Promise((resolve, reject) => {
-    writeFile(path, content, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-}
 
 function glob(pattern: string, options: any): Promise<string[]> {
   return new Promise((resolve, reject) => {
@@ -37,7 +28,7 @@ async function downloadOne(url: string, output: string, maxRetry = 3) {
     const content = await fetch(url);
     const buffer = await content.buffer();
     await mkdirs(dirname(output));
-    await writeFileAsync(output, buffer);
+    await writeFile(output, buffer);
   } catch (e) {
     if (maxRetry > 0) {
       return await downloadOne(url, output, maxRetry - 1);
@@ -106,26 +97,16 @@ class Downloader {
     });
     // 复制文件
     const copyQueue = files.map(it => {
-      return new Promise((resolve, reject) => {
+      return async () => {
         const fullPath = resolvePath(unzipPath, it);
         // 只处理文件
-        stat(fullPath, async (err, stat) => {
-          if (err) {
-            reject(err);
-            return;
-          }
-          if (stat.isFile()) {
-            const to = resolvePath(output, it);
-            await mkdirs(dirname(to));
-            copyFile(fullPath, to, err => {
-              if (err) reject(err);
-              else resolve();
-            });
-          } else {
-            resolve();
-          }
-        });
-      });
+        const stats = await stat(fullPath);
+        if (stats.isFile()) {
+          const to = resolvePath(output, it);
+          await mkdirs(dirname(to));
+          await copyFile(fullPath, to);
+        }
+      }
     });
     // 完成，清理垃圾
     await Promise.all(copyQueue);

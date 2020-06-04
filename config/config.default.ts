@@ -22,7 +22,8 @@ export default (appInfo: EggAppInfo) => {
   // add your special config in here
   const bizConfig = {
     database: resolve(__dirname, '../data/database.db'),
-    url: 'https://cdn.sylibs.com/g/'
+    url: 'https://cdn.sylibs.com/g/',
+    npmUrl: ''
   };
 
   // the return config will combines to EggAppConfig
