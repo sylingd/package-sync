@@ -180,9 +180,10 @@
           if (withTag) {
             if (name.endsWith('.js')) {
               text = '<script src="' + encodeURI(url) + '"><\/script>';
-            }
-            if (name.endsWith('.css')) {
+            } else if (name.endsWith('.css')) {
               text = '<link rel="stylesheet" href="' + encodeURI(url) + '" />';
+            } else {
+              text = '<a href="' + encodeURI(url) + '">' + name + '<\/a>';
             }
           }
           this.$copyText(text).then(() => {

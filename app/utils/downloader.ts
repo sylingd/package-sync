@@ -95,17 +95,18 @@ class Downloader {
     const files = await glob(pattern, {
       cwd: unzipPath
     });
+    if (files.length === 0) {
+      throw new Error("No files");
+    }
     // 复制文件
-    const copyQueue = files.map(it => {
-      return async () => {
-        const fullPath = resolvePath(unzipPath, it);
-        // 只处理文件
-        const stats = await stat(fullPath);
-        if (stats.isFile()) {
-          const to = resolvePath(output, it);
-          await mkdirs(dirname(to));
-          await copyFile(fullPath, to);
-        }
+    const copyQueue = files.map(async it => {
+      const fullPath = resolvePath(unzipPath, it);
+      // 只处理文件
+      const stats = await stat(fullPath);
+      if (stats.isFile()) {
+        const to = resolvePath(output, it);
+        await mkdirs(dirname(to));
+        await copyFile(fullPath, to);
       }
     });
     // 完成，清理垃圾
