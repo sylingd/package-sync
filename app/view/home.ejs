@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>包同步工具</title>
+  <script src="https://g.alicdn.com/code/lib/??vue/2.6.11/vue.min.js,element-ui/2.13.2/index.js,vue-clipboard2/0.3.1/vue-clipboard.min.js"></script>
+  <link rel="stylesheet" href="https://g.alicdn.com/code/lib/element-ui/2.13.2/theme-chalk/index.css">
+  <style>
+    body {
+      margin: 0;
+    }
+    p {
+      margin-top: 0;
+      margin-bottom: 5px;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .el-select .el-input {
+      width: 100px;
+    }
+    .input-with-select .el-input-group__prepend {
+      background-color: #fff;
+    }
+    .package-header {
+      margin-top: 15px;
+      display: flex;
+      flex-direction: row;
+    }
+    .package-header > span {
+      flex-grow: 1;
+      font-size: 26px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <el-container>
+      <el-main>
+        <div class="container">
+          <el-input placeholder="输入名称" v-model="name" class="name-input">
+            <el-select v-model="type" slot="prepend" placeholder="来源">
+              <el-option label="npm" value="npm"></el-option>
+              <el-option label="cdnjs" value="cdnjs"></el-option>
+            </el-select>
+            <el-button slot="append" icon="el-icon-search" @click="handleSearch"></el-button>
+          </el-input>
+          <!-- 搜索结果 -->
+          <el-table v-loading="loading" v-if="current === 'search'" :data="searchResult">
+            <el-table-column
+              label="名称">
+              <template slot-scope="scope">
+                <el-link type="primary" @click="handleEnter(scope.row.name, scope.row.version)">{{ scope.row.name }}</el-link>
+                <el-link type="primary" :href="scope.row.homepage">主页</el-link>
+              </template>
+            </el-table-column>
+            <el-table-column
+              prop="version"
+              label="版本"
+              width="180">
+            </el-table-column>
+          </el-table>
+          <!-- 文件列表 -->
+          <div v-if="current === 'files'">
+            <div class="package-header">
+              <span>{{ currentName }}</span>
+              <el-select size="small" v-model="version" v-loading="versionLoading" placeholder="请选择" @change="handleVersionChange">
+                <el-option v-for="item in versions" :key="item" :label="item" :value="item"></el-option>
+              </el-select>
+              <el-button size="small" style="margin-left:5px" @click="handleSync" :loading="syncing">同步</el-button>
+            </div>
+            <el-table :data="fileList" v-loading="loading">
+              <el-table-column
+                label="文件">
+                <template slot-scope="scope">
+                  {{ scope.row }}
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="复制"
+                width="160">
+                <template slot-scope="scope">
+                  <el-link type="primary" @click="handleCopy(scope.row)">复制</el-link>
+                  <el-link type="primary" @click="handleCopy(scope.row, true)">复制标签</el-link>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
+      </el-main>
+    </el-container>
+  </div>
+  <script>
+    const urlPrefix = '<%= ctx.app.config.url %>';
+    new Vue({
+      el: '#app',
+      data: {
+        current: 'home',
+        loading: false,
+        versionLoading: false,
+        syncing: false,
+        type: 'npm',
+        name: '',
+        currentName: '',
+        searchResult: [],
+        version: "",
+        versions: [],
+        fileList: [],
+      },
+      methods: {
+        handleSearch() {
+          this.loading = true;
+          this.searchResult = [];
+          this.current = 'search';
+          fetch(`/api/search?name=${encodeURIComponent(this.name)}&type=${this.type}`)
+            .then(res => res.json())
+            .then(res => {
+              this.loading = false;
+              this.searchResult = res;
+            });
+        },
+        handleEnter(name, version) {
+          this.loading = true;
+          this.current = 'files';
+          this.version = version;
+          this.currentName = name;
+          this.loadFiles(name, version);
+          // 加载全部版本号
+          this.versions = [];
+          this.versionLoading = true;
+          fetch(`/api/version?name=${encodeURIComponent(name)}&type=${this.type}`)
+            .then(res => res.json())
+            .then(res => {
+              this.versionLoading = false;
+              this.versions = res;
+            });
+        },
+        handleVersionChange() {
+          this.loadFiles(this.currentName, this.version);
+        },
+        loadFiles(name, version) {
+          this.loading = true;
+          fetch(`/api/files?name=${encodeURIComponent(name)}&version=${version}&type=${this.type}`)
+            .then(res => res.json())
+            .then(res => {
+              this.loading = false;
+              this.fileList = res;
+            });
+        },
+        handleSync() {
+          const onInput = (glob) => {
+            this.syncing = true;
+            fetch(`/api/sync?name=${encodeURIComponent(this.currentName)}&version=${this.version}&type=${this.type}&pattern=${encodeURIComponent(glob)}`)
+              .then(res => res.json())
+              .then(() => {
+                this.syncing = false;
+                this.$message({
+                  message: '同步完成',
+                  type: 'success'
+                });
+              });
+          }
+          // 如果是npm，需要输入glob
+          if (this.type === 'npm') {
+            this.$prompt('请输入glob', '提示', {
+              confirmButtonText: '确定',
+              cancelButtonText: '取消',
+            }).then(({ value }) => {
+              onInput(value)
+            })
+          } else {
+            onInput('');
+          }
+        },
+        handleCopy(name, withTag) {
+          const url = `${urlPrefix}${this.currentName}/${this.version}/${name}`;
+          let text = url;
+          if (withTag) {
+            if (name.endsWith('.js')) {
+              text = '<script src="' + encodeURI(url) + '"><\/script>';
+            }
+            if (name.endsWith('.css')) {
+              text = '<link rel="stylesheet" href="' + encodeURI(url) + '" />';
+            }
+          }
+          this.$copyText(text).then(() => {
+            this.$message({
+              message: '复制成功',
+              type: 'success'
+            });
+          })
+        }
+      }
+    });
+  </script>
+</body>
+</html>
